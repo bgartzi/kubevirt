@@ -67,6 +67,7 @@ if [[ "${ARCHITECTURE}" != "s390x" && "${ARCHITECTURE}" != "crossbuild-s390x" ]]
         network-slirp-binding
         network-passt-binding
         network-passt-binding-cni
+        network-vdpa-binding
     "
 fi
 
