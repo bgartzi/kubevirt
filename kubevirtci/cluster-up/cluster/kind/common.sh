@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 source "${KUBEVIRTCI_PATH}/../hack/detect_cri.sh"
 export CRI_BIN=${CRI_BIN:-$(detect_cri)}
