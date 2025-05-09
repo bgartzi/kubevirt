@@ -36,11 +36,6 @@ function validate_nodes_sriov_allocatable_resource() {
   done
 }
 
-function pause(){
- read -s -n 1 -p "Configure vDPA device manually the press a key . . ."
- echo ""
-}
-
 worker_nodes=($(_kubectl get nodes -l node-role.kubernetes.io/worker -o custom-columns=:.metadata.name --no-headers))
 worker_nodes_count=${#worker_nodes[@]}
 [ "$worker_nodes_count" -eq 0 ] && echo "FATAL: no worker nodes found" >&2 && exit 1
@@ -62,10 +57,22 @@ modprobe vdpa
 modprobe vhost-vdpa
 modprobe mlx5-vdpa
 
-echo 0 > /sys/class/net/ens1f0np0/device/sriov_numvfs
-echo 2 > /sys/class/net/ens1f0np0/device/sriov_numvfs
-vdpa dev add name vdpa:0000:65:00.2 mgmtdev pci/0000:65:00.2 mac 00:01:02:03:04:02
-vdpa dev add name vdpa:0000:65:00.3 mgmtdev pci/0000:65:00.3 mac 00:01:02:03:04:03
+echo 0 > /sys/class/net/ens2f0np0/device/sriov_numvfs
+ovs-vsctl set Open_vSwitch . other_config:hw-offload=true
+devlink dev eswitch set pci/0000:0d:00.0 mode switchdev
+echo 2 > /sys/class/net/ens2f0np0/device/sriov_numvfs
+# Attach representors to the worker node bridge.
+ovs-vsctl add-port br-7be9faa9aea8 ens2f0npf0vf0
+ovs-vsctl add-port br-7be9faa9aea8 ens2f0npf0vf1
+# Move representors to worker node's namespace. Is this needed?
+ip netns exec ${CLUSTER_NAME}-worker ip link set up dev ens2f0npf0vf0
+ip netns exec ${CLUSTER_NAME}-worker ip link set up dev ens2f0npf0vf1
+# Create vdpa devices
+vdpa dev add name vdpa:0000:0d:00.2 mgmtdev pci/0000:0d:00.2 mac 00:01:02:03:04:02
+vdpa dev add name vdpa:0000:0d:00.3 mgmtdev pci/0000:0d:00.3 mac 00:01:02:03:04:03
+# And give them the appropriate permissions
+chmod 0666 /dev/vhost-vdpa*
+ls -l /dev/vhost-vdpa*
 
 ## Move SR-IOV Physical Functions to worker nodes
 PFS_IN_USE=""
@@ -73,8 +80,6 @@ node::configure_sriov_pfs "${worker_nodes[*]}" "${pfs_names[*]}" "$PF_COUNT_PER_
 
 ## Create VFs and configure their drivers on each SR-IOV node
 #node::configure_sriov_vfs "${worker_nodes[*]}" "$VFS_DRIVER" "$VFS_DRIVER_KMODULE" "$VFS_COUNT"
-
-#pause
 
 ## Deploy Multus and SRIOV components
 sriov_components::deploy_multus
