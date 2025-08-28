@@ -72,22 +72,42 @@ func isFileEmptyAfterTimeout(err error, data []byte) bool {
 	return errors.Is(err, wait.ErrWaitTimeout) && len(data) == 0
 }
 
-func getVdpaPath(path string) (string, error) {
-	networkPCIMapBytes, err := readFileUntilNotEmpty(path)
+func getDownwardAPINetworkInfo() (*downwardapi.NetworkInfo, error) {
+	netStatusPath := path.Join(downwardapi.MountPath, downwardapi.NetworkInfoVolumePath)
+
+	networkPCIMapBytes, err := readFileUntilNotEmpty(netStatusPath)
 	if err != nil {
 		if isFileEmptyAfterTimeout(err, networkPCIMapBytes) {
-			return "", err
+			return nil, err
 		}
-		return "", nil
+		return nil, nil
 	}
 
-	var result downwardapi.NetworkInfo
-	err = json.Unmarshal(networkPCIMapBytes, &result)
+	result := &downwardapi.NetworkInfo{}
+	err = json.Unmarshal(networkPCIMapBytes, result)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	return result, nil
+}
+
+func getIfaceVdpaConfigurator(iface *vmschema.Interface, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
+	netInfo, err := getDownwardAPINetworkInfo()
+	if err != nil {
+		return nil, err
 	}
 
-	return result.Interfaces[0].DeviceInfo.Vdpa.Path, nil
+	for _, net := range netInfo.Interfaces {
+		if net.Network == iface.Name {
+			return &VdpaNetworkConfigurator{
+				vmiSpecIface: iface,
+				options:      opts,
+				vdpaPath:     net.DeviceInfo.Vdpa.Path,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("interface %s not found in NetworkInfo", iface.Name)
 }
 
 func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, opts NetworkConfiguratorOptions, deviceInfo string) (*VdpaNetworkConfigurator, error) {
@@ -105,12 +125,6 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 		return nil, fmt.Errorf("multus network not found")
 	}
 
-	netStatusPath := path.Join(downwardapi.MountPath, downwardapi.NetworkInfoVolumePath)
-	vdpaPath, err := getVdpaPath(netStatusPath)
-	if err != nil {
-		return nil, err
-	}
-
 	iface := vmispec.LookupInterfaceByName(ifaces, network.Name)
 	if iface == nil {
 		return nil, fmt.Errorf("no interface found")
@@ -119,11 +133,7 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 		return nil, fmt.Errorf("interface %q is not set with Vdpa network binding plugin", network.Name)
 	}
 
-	return &VdpaNetworkConfigurator{
-		vmiSpecIface: iface,
-		options:      opts,
-		vdpaPath:     vdpaPath,
-	}, nil
+	return getIfaceVdpaConfigurator(iface, opts)
 }
 
 func (p VdpaNetworkConfigurator) Mutate(domainSpec *domainschema.DomainSpec) (*domainschema.DomainSpec, error) {
