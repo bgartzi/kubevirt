@@ -24,7 +24,7 @@ import (
 	"maps"
 	"slices"
 
-	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	"kubevirt.io/kubevirt/pkg/network/deviceinfo"
 
 	"kubevirt.io/client-go/log"
 )
@@ -36,7 +36,7 @@ const (
 	NetworkInfoVolumePath = "network-info"
 )
 
-func CreateNetworkInfoAnnotationValue(networkDeviceInfoMap map[string]*networkv1.DeviceInfo) string {
+func CreateNetworkInfoAnnotationValue(networkDeviceInfoMap map[string]*deviceinfo.DeviceInfo) string {
 	networkInfo := generateNetworkInfo(networkDeviceInfoMap)
 	networkInfoBytes, err := json.Marshal(networkInfo)
 	if err != nil {
@@ -47,14 +47,15 @@ func CreateNetworkInfoAnnotationValue(networkDeviceInfoMap map[string]*networkv1
 	return string(networkInfoBytes)
 }
 
-func generateNetworkInfo(networkDeviceInfoMap map[string]*networkv1.DeviceInfo) NetworkInfo {
+func generateNetworkInfo(networkDeviceInfoMap map[string]*deviceinfo.DeviceInfo) NetworkInfo {
 	var downwardAPIInterfaces []Interface
 
 	// Sort keys of the map with to get deterministic order
 	sortedNetNames := slices.Sorted(maps.Keys(networkDeviceInfoMap))
 	for _, networkName := range sortedNetNames {
-		deviceInfo := networkDeviceInfoMap[networkName]
-		downwardAPIInterfaces = append(downwardAPIInterfaces, Interface{Network: networkName, DeviceInfo: deviceInfo})
+		deviceInfo := networkDeviceInfoMap[networkName].DeviceInfo
+		macAddress := networkDeviceInfoMap[networkName].MacAddress
+		downwardAPIInterfaces = append(downwardAPIInterfaces, Interface{Network: networkName, DeviceInfo: deviceInfo, MacAddress: macAddress})
 	}
 	networkInfo := NetworkInfo{Interfaces: downwardAPIInterfaces}
 	return networkInfo

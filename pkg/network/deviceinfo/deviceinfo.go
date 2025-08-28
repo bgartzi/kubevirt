@@ -28,19 +28,27 @@ import (
 	"kubevirt.io/kubevirt/pkg/network/namescheme"
 )
 
+type DeviceInfo struct {
+	*networkv1.DeviceInfo
+	MacAddress string
+}
+
 func MapNetworkNameToDeviceInfo(networks []v1.Network,
 	interfaces []v1.Interface,
 	networkStatuses []networkv1.NetworkStatus,
-) map[string]*networkv1.DeviceInfo {
+) map[string]*DeviceInfo {
 	multusInterfaceNameToNetworkStatus := multus.NetworkStatusesByPodIfaceName(networkStatuses)
 	podIfaceNamesByNetworkName := namescheme.CreateFromNetworkStatuses(networks, networkStatuses)
 
-	networkDeviceInfo := map[string]*networkv1.DeviceInfo{}
+	networkDeviceInfo := map[string]*DeviceInfo{}
 	for _, iface := range interfaces {
 		multusInterfaceName := podIfaceNamesByNetworkName[iface.Name]
 		networkStatusEntry, exist := multusInterfaceNameToNetworkStatus[multusInterfaceName]
 		if exist && networkStatusEntry.DeviceInfo != nil {
-			networkDeviceInfo[iface.Name] = networkStatusEntry.DeviceInfo
+			networkDeviceInfo[iface.Name] = &DeviceInfo{
+				DeviceInfo: networkStatusEntry.DeviceInfo,
+				MacAddress: networkStatusEntry.Mac,
+			}
 			// Note: there is no need to return an error in case the interface doesn't exist,
 			// it may mean the interface is not plugged yet
 		}
