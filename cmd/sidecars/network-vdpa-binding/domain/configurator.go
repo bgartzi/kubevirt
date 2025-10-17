@@ -104,7 +104,7 @@ func getIfaceVdpaConfigurator(iface *vmschema.Interface, opts NetworkConfigurato
 				vmiSpecIface: iface,
 				options:      opts,
 				vdpaPath:     net.DeviceInfo.Vdpa.Path,
-				macAddr:      net.MacAddress,
+				macAddr:      net.Mac,
 			}, nil
 		}
 	}
@@ -112,7 +112,7 @@ func getIfaceVdpaConfigurator(iface *vmschema.Interface, opts NetworkConfigurato
 	return nil, fmt.Errorf("interface %s not found in NetworkInfo", iface.Name)
 }
 
-func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, opts NetworkConfiguratorOptions, deviceInfo string) (*VdpaNetworkConfigurator, error) {
+func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
 
 	var network *vmschema.Network
 	for _, net := range networks {
