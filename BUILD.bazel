@@ -282,6 +282,12 @@ oci_push(
 )
 
 oci_push(
+    name = "push-network-vdpa-binding",
+    image = "//cmd/sidecars/network-vdpa-binding:network-vdpa-binding-image",
+    repository = "quay.io/kubevirt/network-vdpa-binding",
+)
+
+oci_push(
     name = "push-example-hook-sidecar",
     image = "//cmd/sidecars/smbios:example-hook-sidecar-image",
     repository = "quay.io/kubevirt/example-hook-sidecar",
