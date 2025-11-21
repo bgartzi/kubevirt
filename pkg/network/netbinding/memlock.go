@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	v1 "kubevirt.io/api/core/v1"
+	"kubevirt.io/client-go/log"
 )
 
 func NetBindingHasMemoryLockRequirements(binding *v1.InterfaceBindingPlugin) bool {
@@ -35,6 +36,7 @@ func ApplyNetBindingMemlockRequirements(
 	registeredPlugins map[string]v1.InterfaceBindingPlugin,
 ) *resource.Quantity {
 	ratio, offset := gatherNetBindingMemLockRequirements(vmi, registeredPlugins)
+	log.Log.V(1).Infof("bgartzia: reqs are: Ratio: %d/Offset: %d/%s?", ratio, offset.Value(), offset.Format)
 
 	if ratio == 0 {
 		if offset != nil || offset.IsZero() {

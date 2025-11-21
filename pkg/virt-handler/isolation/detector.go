@@ -93,10 +93,14 @@ func (s *socketBasedIsolationDetector) DetectForSocket(socket string) (Isolation
 }
 
 func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineInstance, additionalOverheadRatio *string, networkBindings map[string]v1.InterfaceBindingPlugin) error {
+	log.Log.V(1).Infof("bgartzia: are we applying special memlock?")
+	log.Log.V(1).Infof("bgartzia: bindings are: %#v", networkBindings)
 	// only VFIO attached or with lock guest memory domains require MEMLOCK adjustment
 	if !util.IsVFIOVMI(vmi) && !vmi.IsRealtimeEnabled() && !util.IsSEVVMI(vmi) && !vmispec.BindingPluginNetworkNeedsMemLockLimitConfig(vmi.Spec.Domain.Devices.Interfaces, networkBindings) {
+		log.Log.V(1).Infof("bgartzia: no?")
 		return nil
 	}
+	log.Log.V(1).Infof("bgartzia: yes?")
 
 	// bump memlock ulimit for virtqemud
 	res, err := s.Detect(vmi)
@@ -120,7 +124,11 @@ func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineIns
 		vmiBaseMemory = vmi.Spec.Domain.Resources.Requests.Memory()
 	}
 
+	log.Log.V(1).Infof("bgartzia: overhead lock: %d", memlockSize.Value())
+	log.Log.V(1).Infof("bgartzia: guestmem lock: %d", vmiBaseMemory.Value())
+
 	memlockSize.Add(*netbinding.ApplyNetBindingMemlockRequirements(vmiBaseMemory, vmi, networkBindings))
+	log.Log.V(1).Infof("bgartzia: wbinding lock: %d", memlockSize.Value())
 
 	for _, process := range processes {
 		// consider all processes that are virt-launcher children
@@ -133,10 +141,12 @@ func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineIns
 			continue
 		}
 
+		log.Log.V(1).Infof("bgartzia: set memlock rlimits to: Cur: %[1]d", memlockSize.Value())
 		err = setProcessMemoryLockRLimit(process.Pid(), memlockSize.Value())
 		if err != nil {
 			return fmt.Errorf("failed to set process %d memlock rlimit to %d: %v", process.Pid(), memlockSize.Value(), err)
 		}
+		log.Log.V(1).Infof("bgartzia: memlock rlimits set")
 		// we assume a single process should match
 		break
 	}
