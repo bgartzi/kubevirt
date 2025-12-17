@@ -108,6 +108,10 @@ func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineIns
 		memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
 	}
 
+	if vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.LockRLimits != nil {
+		memlockSize.Add(*vmi.Spec.Domain.Memory.LockRLimits)
+	}
+
 	if memlockSize.IsZero() {
 		return nil
 	}
@@ -167,6 +171,10 @@ func AdjustQemuProcessMemoryLimits(podIsoDetector PodIsolationDetector, vmi *v1.
 		}
 
 		memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
+	}
+
+	if vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.LockRLimits != nil {
+		memlockSize.Add(*vmi.Spec.Domain.Memory.LockRLimits)
 	}
 
 	if memlockSize.IsZero() {
