@@ -91,8 +91,24 @@ func (s *socketBasedIsolationDetector) DetectForSocket(socket string) (Isolation
 }
 
 func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineInstance, additionalOverheadRatio *string) error {
+	var memlockSize resource.Quantity
+
 	// only VFIO attached or with lock guest memory domains require MEMLOCK adjustment
-	if !util.IsVFIOVMI(vmi) && !vmi.IsRealtimeEnabled() && !util.IsSEVVMI(vmi) {
+	if util.IsVFIOVMI(vmi) && vmi.IsRealtimeEnabled() && util.IsSEVVMI(vmi) {
+		// make the best estimate for memory required by libvirt
+		memlockSize := services.GetMemoryOverhead(vmi, runtime.GOARCH, additionalOverheadRatio)
+		// Add base memory requested for the VM
+		var vmiBaseMemory *resource.Quantity
+		if vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.Guest != nil {
+			vmiBaseMemory = vmi.Spec.Domain.Memory.Guest
+		} else {
+			vmiBaseMemory = vmi.Spec.Domain.Resources.Requests.Memory()
+		}
+
+		memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
+	}
+
+	if memlockSize.IsZero() {
 		return nil
 	}
 
@@ -101,24 +117,13 @@ func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineIns
 	if err != nil {
 		return err
 	}
+
 	launcherPid := res.Pid()
 
 	processes, err := ps.Processes()
 	if err != nil {
 		return fmt.Errorf("failed to get all processes: %v", err)
 	}
-
-	// make the best estimate for memory required by libvirt
-	memlockSize := services.GetMemoryOverhead(vmi, runtime.GOARCH, additionalOverheadRatio)
-	// Add base memory requested for the VM
-	var vmiBaseMemory *resource.Quantity
-	if vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.Guest != nil {
-		vmiBaseMemory = vmi.Spec.Domain.Memory.Guest
-	} else {
-		vmiBaseMemory = vmi.Spec.Domain.Resources.Requests.Memory()
-	}
-
-	memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
 
 	for _, process := range processes {
 		// consider all processes that are virt-launcher children
@@ -145,7 +150,26 @@ func (s *socketBasedIsolationDetector) AdjustResources(vmi *v1.VirtualMachineIns
 // virt-launcher pod on the given VMI according to its spec.
 // Only VMI's with VFIO devices (e.g: SRIOV, GPU), SEV or RealTime workloads require QEMU process MEMLOCK adjustment.
 func AdjustQemuProcessMemoryLimits(podIsoDetector PodIsolationDetector, vmi *v1.VirtualMachineInstance, additionalOverheadRatio *string) error {
-	if !util.IsVFIOVMI(vmi) && !vmi.IsRealtimeEnabled() && !util.IsSEVVMI(vmi) {
+	var memlockSize resource.Quantity
+	if util.IsVFIOVMI(vmi) && vmi.IsRealtimeEnabled() && util.IsSEVVMI(vmi) {
+		// make the best estimate for memory required by libvirt
+		memlockSize := services.GetMemoryOverhead(vmi, runtime.GOARCH, additionalOverheadRatio)
+		// Add max memory assigned to the VM
+		var vmiBaseMemory *resource.Quantity
+
+		switch {
+		case vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.MaxGuest != nil:
+			vmiBaseMemory = vmi.Spec.Domain.Memory.MaxGuest
+		case vmi.Spec.Domain.Resources.Requests.Memory() != nil:
+			vmiBaseMemory = vmi.Spec.Domain.Resources.Requests.Memory()
+		case vmi.Spec.Domain.Memory != nil:
+			vmiBaseMemory = vmi.Spec.Domain.Memory.Guest
+		}
+
+		memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
+	}
+
+	if memlockSize.IsZero() {
 		return nil
 	}
 
@@ -159,21 +183,6 @@ func AdjustQemuProcessMemoryLimits(podIsoDetector PodIsolationDetector, vmi *v1.
 		return err
 	}
 	qemuProcessID := qemuProcess.Pid()
-	// make the best estimate for memory required by libvirt
-	memlockSize := services.GetMemoryOverhead(vmi, runtime.GOARCH, additionalOverheadRatio)
-	// Add max memory assigned to the VM
-	var vmiBaseMemory *resource.Quantity
-
-	switch {
-	case vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.MaxGuest != nil:
-		vmiBaseMemory = vmi.Spec.Domain.Memory.MaxGuest
-	case vmi.Spec.Domain.Resources.Requests.Memory() != nil:
-		vmiBaseMemory = vmi.Spec.Domain.Resources.Requests.Memory()
-	case vmi.Spec.Domain.Memory != nil:
-		vmiBaseMemory = vmi.Spec.Domain.Memory.Guest
-	}
-
-	memlockSize.Add(*resource.NewScaledQuantity(vmiBaseMemory.ScaledValue(resource.Kilo), resource.Kilo))
 
 	if err := setProcessMemoryLockRLimit(qemuProcessID, memlockSize.Value()); err != nil {
 		return fmt.Errorf("failed to set process %d memlock rlimit to %d: %v", qemuProcessID, memlockSize.Value(), err)
