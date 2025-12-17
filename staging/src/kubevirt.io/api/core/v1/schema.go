@@ -401,6 +401,13 @@ type Memory struct {
 	// MaxGuest allows to specify the maximum amount of memory which is visible inside the Guest OS.
 	// The delta between MaxGuest and Guest is the amount of memory that can be hot(un)plugged.
 	MaxGuest *resource.Quantity `json:"maxGuest,omitempty"`
+	// LockRLimits allows specifying the memory lock RLimits configured
+	// for the virt-launcher pod. In cases in which VM memory might be
+	// locked due to different conditions or needs of devices (DMA,
+	// IOMMU), this field provides a way of configuring those RLimits
+	// properly.
+	// +optional
+	LockRLimits *resource.Quantity `json:"lockRLimits,omitempty"`
 }
 
 type MemoryStatus struct {

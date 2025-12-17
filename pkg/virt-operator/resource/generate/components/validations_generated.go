@@ -7117,6 +7117,18 @@ var CRDsValidation map[string]string = map[string]string{
                                 x86_64 architecture valid values are 1Gi and 2Mi.
                               type: string
                           type: object
+                        lockRLimits:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            LockRLimits allows specifying the memory lock RLimits configured
+                            for the virt-launcher pod. In cases in which VM memory might be
+                            locked due to different conditions or needs of devices (DMA,
+                            IOMMU), this field provides a way of configuring those RLimits
+                            properly.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                         maxGuest:
                           anyOf:
                           - type: integer
@@ -12752,6 +12764,18 @@ var CRDsValidation map[string]string = map[string]string{
                         architecture valid values are 1Gi and 2Mi.
                       type: string
                   type: object
+                lockRLimits:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  description: |-
+                    LockRLimits allows specifying the memory lock RLimits configured
+                    for the virt-launcher pod. In cases in which VM memory might be
+                    locked due to different conditions or needs of devices (DMA,
+                    IOMMU), this field provides a way of configuring those RLimits
+                    properly.
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
                 maxGuest:
                   anyOf:
                   - type: integer
@@ -16545,6 +16569,18 @@ var CRDsValidation map[string]string = map[string]string{
                         architecture valid values are 1Gi and 2Mi.
                       type: string
                   type: object
+                lockRLimits:
+                  anyOf:
+                  - type: integer
+                  - type: string
+                  description: |-
+                    LockRLimits allows specifying the memory lock RLimits configured
+                    for the virt-launcher pod. In cases in which VM memory might be
+                    locked due to different conditions or needs of devices (DMA,
+                    IOMMU), this field provides a way of configuring those RLimits
+                    properly.
+                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                  x-kubernetes-int-or-string: true
                 maxGuest:
                   anyOf:
                   - type: integer
@@ -19044,6 +19080,18 @@ var CRDsValidation map[string]string = map[string]string{
                                 x86_64 architecture valid values are 1Gi and 2Mi.
                               type: string
                           type: object
+                        lockRLimits:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            LockRLimits allows specifying the memory lock RLimits configured
+                            for the virt-launcher pod. In cases in which VM memory might be
+                            locked due to different conditions or needs of devices (DMA,
+                            IOMMU), this field provides a way of configuring those RLimits
+                            properly.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
                         maxGuest:
                           anyOf:
                           - type: integer
@@ -24056,6 +24104,18 @@ var CRDsValidation map[string]string = map[string]string{
                                         are 1Gi and 2Mi.
                                       type: string
                                   type: object
+                                lockRLimits:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: |-
+                                    LockRLimits allows specifying the memory lock RLimits configured
+                                    for the virt-launcher pod. In cases in which VM memory might be
+                                    locked due to different conditions or needs of devices (DMA,
+                                    IOMMU), this field provides a way of configuring those RLimits
+                                    properly.
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
                                 maxGuest:
                                   anyOf:
                                   - type: integer
@@ -29498,6 +29558,18 @@ var CRDsValidation map[string]string = map[string]string{
                                             are 1Gi and 2Mi.
                                           type: string
                                       type: object
+                                    lockRLimits:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      description: |-
+                                        LockRLimits allows specifying the memory lock RLimits configured
+                                        for the virt-launcher pod. In cases in which VM memory might be
+                                        locked due to different conditions or needs of devices (DMA,
+                                        IOMMU), this field provides a way of configuring those RLimits
+                                        properly.
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
                                     maxGuest:
                                       anyOf:
                                       - type: integer

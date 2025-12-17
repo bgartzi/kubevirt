@@ -429,6 +429,7 @@ spec:
       guest: "0"
       hugepages:
         pageSize: pageSizeValue
+      lockRLimits: "0"
       maxGuest: "0"
     resources:
       limits:

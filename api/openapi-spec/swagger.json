@@ -16331,6 +16331,10 @@
       "description": "Hugepages allow to use hugepages for the VirtualMachineInstance instead of regular memory.",
       "$ref": "#/definitions/v1.Hugepages"
      },
+     "lockRLimits": {
+      "description": "LockRLimits allows specifying the memory lock RLimits configured for the virt-launcher pod. In cases in which VM memory might be locked due to different conditions or needs of devices (DMA, IOMMU), this field provides a way of configuring those RLimits properly.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.api.resource.Quantity"
+     },
      "maxGuest": {
       "description": "MaxGuest allows to specify the maximum amount of memory which is visible inside the Guest OS. The delta between MaxGuest and Guest is the amount of memory that can be hot(un)plugged.",
       "$ref": "#/definitions/k8s.io.apimachinery.pkg.api.resource.Quantity"

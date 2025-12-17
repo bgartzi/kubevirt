@@ -81,7 +81,8 @@
           "pageSize": "pageSizeValue"
         },
         "guest": "0",
-        "maxGuest": "0"
+        "maxGuest": "0",
+        "lockRLimits": "0"
       },
       "machine": {
         "type": "typeValue"

@@ -3366,6 +3366,11 @@ func (in *Memory) DeepCopyInto(out *Memory) {
 		x := (*in).DeepCopy()
 		*out = &x
 	}
+	if in.LockRLimits != nil {
+		in, out := &in.LockRLimits, &out.LockRLimits
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	return
 }
 

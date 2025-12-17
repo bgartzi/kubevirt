@@ -23416,6 +23416,12 @@ func schema_kubevirtio_api_core_v1_Memory(ref common.ReferenceCallback) common.O
 							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
 						},
 					},
+					"lockRLimits": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LockRLimits allows specifying the memory lock RLimits configured for the virt-launcher pod. In cases in which VM memory might be locked due to different conditions or needs of devices (DMA, IOMMU), this field provides a way of configuring those RLimits properly.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
 				},
 			},
 		},
