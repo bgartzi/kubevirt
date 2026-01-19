@@ -2354,9 +2354,9 @@ func (c *Controller) alertIfHostModelIsUnschedulable(vmi *virtv1.VirtualMachineI
 	for _, nodeInterface := range nodes {
 		node := nodeInterface.(*k8sv1.Node)
 
-		if node.Name == vmi.Status.NodeName {
-			continue // avoid checking the VMI's source node
-		}
+		// if node.Name == vmi.Status.NodeName {
+		// 	continue // avoid checking the VMI's source node
+		// }
 
 		if isNodeSuitableForHostModelMigration(node, requiredNodeLabels) {
 			log.Log.Object(vmi).Infof("Node %s is suitable to run vmi %s host model cpu mode (more nodes may fit as well)", node.Name, vmi.Name)
