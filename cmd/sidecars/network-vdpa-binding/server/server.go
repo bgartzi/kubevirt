@@ -23,9 +23,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	vmschema "kubevirt.io/api/core/v1"
+
+	"kubevirt.io/kubevirt/pkg/network/downwardapi"
 
 	hooksInfo "kubevirt.io/kubevirt/pkg/hooks/info"
 	hooksV1alpha2 "kubevirt.io/kubevirt/pkg/hooks/v1alpha2"
@@ -74,7 +77,13 @@ func (s V1alpha2Server) OnDefineDomain(_ context.Context, params *hooksV1alpha2.
 		IstioProxyInjectionEnabled: istioProxyInjectionEnabled,
 	}
 
-	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, opts)
+	netInfoPath := path.Join(downwardapi.MountPath, downwardapi.NetworkInfoVolumePath)
+	netInfo, err := domain.GetDownwardAPINetworkInfo(netInfoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read network-info: %v", err)
+	}
+
+	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, netInfo, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vdpa configurator: %v", err)
 	}
