@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"time"
 
 	vmschema "kubevirt.io/api/core/v1"
@@ -71,10 +70,8 @@ func readFileUntilNotEmpty(networkPCIMapPath string) ([]byte, error) {
 	return networkPCIMapBytes, err
 }
 
-func getDownwardAPINetworkInfo() (*downwardapi.NetworkInfo, error) {
-	netStatusPath := path.Join(downwardapi.MountPath, downwardapi.NetworkInfoVolumePath)
-
-	networkPCIMapBytes, err := readFileUntilNotEmpty(netStatusPath)
+func GetDownwardAPINetworkInfo(filePath string) (*downwardapi.NetworkInfo, error) {
+	networkPCIMapBytes, err := readFileUntilNotEmpty(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +84,7 @@ func getDownwardAPINetworkInfo() (*downwardapi.NetworkInfo, error) {
 	return result, nil
 }
 
-func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
-	netInfo, err := getDownwardAPINetworkInfo()
-	if err != nil {
-		return nil, err
-	}
-
+func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, netInfo *downwardapi.NetworkInfo, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
 	var macs []string
 	var vdpaPaths []string
 
@@ -120,7 +112,7 @@ func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, opts NetworkConfigur
 
 }
 
-func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
+func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, netInfo *downwardapi.NetworkInfo, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
 
 	var vdpaIfaces []*vmschema.Interface
 	for _, net := range networks {
@@ -143,7 +135,7 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 		return nil, fmt.Errorf("no vdpa interface found")
 	}
 
-	return getIfaceVdpaConfigurator(vdpaIfaces, opts)
+	return getIfaceVdpaConfigurator(vdpaIfaces, netInfo, opts)
 }
 
 func (p VdpaNetworkConfigurator) Mutate(domainSpec *domainschema.DomainSpec) (*domainschema.DomainSpec, error) {
