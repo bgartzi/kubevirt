@@ -309,6 +309,41 @@ var _ = Describe("pod network configurator", func() {
 			_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
 			Expect(err).To(HaveOccurred())
 		})
+
+		It("should set vdpa path correctly if after network-info update", func() {
+			ifaces := []vmschema.Interface{{Name: "vdpa-path-update", Binding: &vmschema.PluginBinding{Name: "vdpa"}}}
+			networks := []vmschema.Network{{Name: "vdpa-path-update", NetworkSource: vmschema.NetworkSource{Multus: &vmschema.MultusNetwork{}}}}
+
+			netInfo1 := newNetInfo("vdpa-path-update", "/dev/vhost-vdpa-1", "")
+			expectedDomainIface1 := &domainschema.Interface{
+				Alias:  domainschema.NewUserDefinedAlias("vdpa-path-update"),
+				Type:   "vdpa",
+				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-1"},
+				Model:  &domainschema.Model{Type: "virtio"},
+				MAC:    nil,
+			}
+
+			netInfo2 := newNetInfo("vdpa-path-update", "/dev/vhost-vdpa-2", "")
+			expectedDomainIface2 := &domainschema.Interface{
+				Alias:  domainschema.NewUserDefinedAlias("vdpa-path-update"),
+				Type:   "vdpa",
+				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-2"},
+				Model:  &domainschema.Model{Type: "virtio"},
+				MAC:    nil,
+			}
+
+			testMutator1, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo1, domain.NetworkConfiguratorOptions{})
+			Expect(err).ToNot(HaveOccurred())
+			result1, err := testMutator1.Mutate(&domainschema.DomainSpec{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result1.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface1}))
+
+			testMutator2, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo2, domain.NetworkConfiguratorOptions{})
+			Expect(err).ToNot(HaveOccurred())
+			result2, err := testMutator2.Mutate(result1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result2.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface2}))
+		})
 	})
 
 	Context("GetDownwardAPINetworkInfo file handling", func() {
