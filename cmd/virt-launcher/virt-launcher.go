@@ -21,6 +21,7 @@ package main
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	goflag "flag"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"libvirt.org/go/libvirt"
+	"libvirt.org/go/libvirtxml"
 
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/log"
@@ -65,6 +67,7 @@ import (
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/api"
 	virtcli "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/cli"
 	cmdserver "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/cmd-server"
+	convertertypes "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/converter/types"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/util"
 )
 
@@ -447,9 +450,43 @@ func main() {
 	if *ifacesOrdinalNamingUpgradeEnabled {
 		hookFuncs = append(hookFuncs, network.UpgradeOrdinalNamingScheme)
 	}
+
 	if *vGPUDedicatedHookEnabled {
 		hookFuncs = append(hookFuncs, vgpuhook.VGPULiveMigration)
 	}
+
+	hookFuncs = append(hookFuncs,
+		func(_ *convertertypes.ConverterContext, vmi *v1.VirtualMachineInstance, domain *libvirtxml.Domain) error {
+			// Some trickery to move the libvirtxml Domain into a
+			// DomainSpec that we can use with sidecar hooks :)
+			xmlstr, err := xml.Marshal(domain)
+			if err != nil {
+				return err
+			}
+			var apiDomainSpec api.DomainSpec
+			err = xml.Unmarshal([]byte(xmlstr), &apiDomainSpec)
+			if err != nil {
+				return err
+			}
+			// Trickery done, we can apply sidecars
+			apiDomXml, err := hookManager.OnDefineDomain(&apiDomainSpec, vmi)
+			log.Log.Infof("bgartzia:hookdomxl:%s", apiDomXml)
+			// FIXME@bgartzia: I just care about network interfaces
+			// so... yolo: get it back into an libvirtxml domain and
+			// update interfaces only
+			var processedDomain libvirtxml.Domain
+			err = xml.Unmarshal([]byte(apiDomXml), &processedDomain)
+			if err != nil {
+				return err
+			}
+			xmlstrPrint, err := xml.Marshal(processedDomain.Devices.Interfaces)
+			log.Log.Infof("bgartzia:backintolibvirtinterfaces:%s", xmlstrPrint)
+
+			domain.Devices.Interfaces = processedDomain.Devices.Interfaces
+
+			return nil
+		},
+	)
 
 	preMigrationHookServer := premigrationhookserver.NewPreMigrationHookServer(
 		stopChan,
