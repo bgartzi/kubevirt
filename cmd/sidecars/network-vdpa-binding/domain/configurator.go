@@ -54,8 +54,6 @@ type VdpaNetworkConfigurator struct {
 const (
 	// VdpaPluginName vdpa binding plugin name should be registered to Kubevirt through Kubevirt CR
 	VdpaPluginName = "vdpa"
-	// VdpaLogFilePath vdpa log file path Kubevirt consume and record
-	VdpaLogFilePath = "/var/run/kubevirt/vdpa.log"
 )
 
 func readFileUntilNotEmpty(networkPCIMapPath string) ([]byte, error) {
