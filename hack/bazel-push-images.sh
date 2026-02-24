@@ -68,6 +68,7 @@ if [[ "${ARCHITECTURE}" != "s390x" && "${ARCHITECTURE}" != "crossbuild-s390x" ]]
         network-passt-binding
         network-passt-binding-cni
         network-vdpa-binding
+        kubevirt-vdpa-mutating-webhook
     "
 fi
 
