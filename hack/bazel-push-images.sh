@@ -42,6 +42,7 @@ default_targets="
     network-slirp-binding
     network-passt-binding
     network-vdpa-binding
+    kubevirt-vdpa-mutating-webhook
 "
 
 # Add additional images for non-s390x architectures only

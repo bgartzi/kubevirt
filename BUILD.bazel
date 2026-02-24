@@ -288,6 +288,12 @@ oci_push(
 )
 
 oci_push(
+    name = "push-kubevirt-vdpa-mutating-webhook",
+    image = "//cmd/webhooks/mutating/vdpa:kubevirt-vdpa-mutating-webhook-image",
+    repository = "quay.io/kubevirt/kubevirt-vdpa-mutating-webhook",
+)
+
+oci_push(
     name = "push-example-hook-sidecar",
     image = "//cmd/sidecars/smbios:example-hook-sidecar-image",
     repository = "quay.io/kubevirt/example-hook-sidecar",
