@@ -34,10 +34,9 @@ import (
 )
 
 const (
-	webhookName    = "kubevirt-vdpa-mutating-webhook"
-	webhookPath    = "/mutate-vdpa"
-	healthzPath    = "/healthz"
-	webhookRegName = "vdpa-reservedoverhead.kubevirt.io"
+	webhookName = "kubevirt-vdpa-mutating-webhook"
+	webhookPath = "/mutate-vdpa"
+	healthzPath = "/healthz"
 )
 
 func main() {
@@ -54,8 +53,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := createOrUpdateWebhookConfiguration(caCertPEM, *svcName, *svcNamespace); err != nil {
-		log.Log.Reason(err).Errorf("Failed to register MutatingWebhookConfiguration")
+	if err := patchWebhookCABundle(caCertPEM); err != nil {
+		log.Log.Reason(err).Errorf("Failed to patch MutatingWebhookConfiguration caBundle")
 		os.Exit(1)
 	}
 
