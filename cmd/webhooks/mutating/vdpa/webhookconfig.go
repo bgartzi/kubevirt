@@ -23,15 +23,16 @@ import (
 	"context"
 	"fmt"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"kubevirt.io/client-go/log"
+
+	"kubevirt.io/kubevirt/pkg/apimachinery/patch"
 )
 
-func createOrUpdateWebhookConfiguration(caCertPEM []byte, svcName, svcNamespace string) error {
+func patchWebhookCABundle(caCertPEM []byte) error {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return fmt.Errorf("not running in cluster: %v", err)
@@ -41,60 +42,17 @@ func createOrUpdateWebhookConfiguration(caCertPEM []byte, svcName, svcNamespace 
 		return fmt.Errorf("failed to create clientset: %v", err)
 	}
 
-	failPolicy := admissionregistrationv1.Fail
-	sideEffect := admissionregistrationv1.SideEffectClassNone
-	path := webhookPath
-
-	mutatingWebhookConfig := &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: webhookName,
-			Labels: map[string]string{
-				"app": webhookName,
-			},
-		},
-		Webhooks: []admissionregistrationv1.MutatingWebhook{{
-			Name:                    webhookRegName,
-			AdmissionReviewVersions: []string{"v1"},
-			SideEffects:             &sideEffect,
-			FailurePolicy:           &failPolicy,
-			ClientConfig: admissionregistrationv1.WebhookClientConfig{
-				CABundle: caCertPEM,
-				Service: &admissionregistrationv1.ServiceReference{
-					Name:      svcName,
-					Namespace: svcNamespace,
-					Path:      &path,
-				},
-			},
-			Rules: []admissionregistrationv1.RuleWithOperations{{
-				Operations: []admissionregistrationv1.OperationType{
-					admissionregistrationv1.Create,
-				},
-				Rule: admissionregistrationv1.Rule{
-					APIGroups:   []string{"kubevirt.io"},
-					APIVersions: []string{"v1"},
-					Resources:   []string{"virtualmachines"},
-				},
-			}},
-		}},
+	patchSet := patch.New(patch.WithAdd("/webhooks/0/clientConfig/caBundle", caCertPEM))
+	patchBytes, err := patchSet.GeneratePayload()
+	if err != nil {
+		return fmt.Errorf("failed to generate patch: %v", err)
 	}
 
-	client := clientset.AdmissionregistrationV1().MutatingWebhookConfigurations()
-	foundWebhookConfig, err := client.Get(context.Background(), webhookName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		if _, err := client.Create(context.Background(), mutatingWebhookConfig, metav1.CreateOptions{}); err != nil {
-			return fmt.Errorf("failed to create webhook config: %v", err)
-		}
-		log.Log.V(2).Infof("Created MutatingWebhookConfiguration: %s", webhookName)
-		return nil
-
-	} else if err != nil {
-		return fmt.Errorf("failed to get webhook config: %v", err)
+	_, err = clientset.AdmissionregistrationV1().MutatingWebhookConfigurations().Patch(context.Background(), webhookName, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to patch webhook caBundle: %v", err)
 	}
 
-	mutatingWebhookConfig.ObjectMeta.ResourceVersion = foundWebhookConfig.ObjectMeta.ResourceVersion
-	if _, err := client.Update(context.Background(), mutatingWebhookConfig, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("failed to update webhook config: %v", err)
-	}
-	log.Log.V(2).Infof("Updated MutatingWebhookConfiguration: %s", webhookName)
+	log.Log.V(2).Infof("Patched caBundle on MutatingWebhookConfiguration: %s", webhookName)
 	return nil
 }
