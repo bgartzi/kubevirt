@@ -26,22 +26,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"kubevirt.io/client-go/log"
 
 	"kubevirt.io/kubevirt/pkg/apimachinery/patch"
 )
 
-func patchWebhookCABundle(caCertPEM []byte) error {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return fmt.Errorf("not running in cluster: %v", err)
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create clientset: %v", err)
-	}
-
+func patchWebhookCABundle(clientset kubernetes.Interface, caCertPEM []byte) error {
 	patchSet := patch.New(patch.WithAdd("/webhooks/0/clientConfig/caBundle", caCertPEM))
 	patchBytes, err := patchSet.GeneratePayload()
 	if err != nil {
