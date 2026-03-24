@@ -47,16 +47,15 @@ func main() {
 	svcNamespace := flag.String("namespace", "kubevirt", "Webhook service namespace")
 	flag.Parse()
 
-	caCertPEM, tlsCert, err := generateCertificates(*svcName, *svcNamespace)
+	certMgr, err := newCertManager(*svcName, *svcNamespace)
 	if err != nil {
-		log.Log.Reason(err).Errorf("Failed to generate TLS certificates")
+		log.Log.Reason(err).Errorf("Failed to initialize certificate manager")
 		os.Exit(1)
 	}
 
-	if err := patchWebhookCABundle(caCertPEM); err != nil {
-		log.Log.Reason(err).Errorf("Failed to patch MutatingWebhookConfiguration caBundle")
-		os.Exit(1)
-	}
+	renewalCtx, stopRenewal := context.WithCancel(context.Background())
+	defer stopRenewal()
+	go certMgr.runRenewalLoop(renewalCtx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(webhookPath, handleMutateVDPA)
@@ -66,7 +65,7 @@ func main() {
 		Addr:    fmt.Sprintf(":%d", *port),
 		Handler: mux,
 		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{tlsCert},
+			GetCertificate: certMgr.GetCertificate,
 		},
 		ReadHeaderTimeout: 5 * time.Second,
 	}

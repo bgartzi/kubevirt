@@ -20,15 +20,126 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"sync"
 	"time"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"kubevirt.io/client-go/log"
 
 	"kubevirt.io/kubevirt/pkg/certificates/triple"
 	"kubevirt.io/kubevirt/pkg/certificates/triple/cert"
 )
 
-const certDuration = 365 * 24 * time.Hour // 1 year
+const (
+	certDuration    = 365 * 24 * time.Hour                       // certificate validity period (1 year)
+	certRenewBefore = time.Duration(float64(certDuration) * 0.2) // renew when 20% of validity remains
+	retryInterval   = 1 * time.Minute                            // retry delay after renewal failure
+)
+
+type certManager struct {
+	mutex        sync.RWMutex
+	currentCert  *tls.Certificate
+	caCertPEM    []byte
+	svcName      string
+	svcNamespace string
+	clientset    kubernetes.Interface
+}
+
+func newCertManager(serviceName, serviceNamespace string) (*certManager, error) {
+	clusterConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("not running in cluster: %v", err)
+	}
+	clientset, err := kubernetes.NewForConfig(clusterConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes clientset: %v", err)
+	}
+
+	cm := &certManager{
+		svcName:      serviceName,
+		svcNamespace: serviceNamespace,
+		clientset:    clientset,
+	}
+
+	if err := cm.renewCertificates(); err != nil {
+		return nil, fmt.Errorf("initial certificate generation failed: %v", err)
+	}
+	return cm, nil
+}
+
+// Go's TLS stack calls this whenever a client opens a new HTTPS connection.
+// We return whatever cert we're serving right now (after a renewal, callers get the new one).
+func (cm *certManager) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	return cm.currentCert, nil
+}
+
+func (cm *certManager) renewCertificates() error {
+	caCertPEM, tlsCert, err := generateCertificates(cm.svcName, cm.svcNamespace)
+	if err != nil {
+		return fmt.Errorf("failed to generate certificates: %v", err)
+	}
+
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	if err := patchWebhookCABundle(cm.clientset, caCertPEM); err != nil {
+		return fmt.Errorf("failed to patch caBundle: %v", err)
+	}
+
+	cm.currentCert = &tlsCert
+	cm.caCertPEM = caCertPEM
+
+	log.Log.Infof("Certificates renewed successfully, new expiry: %s", tlsCert.Leaf.NotAfter.Format(time.RFC3339))
+	return nil
+}
+
+func (cm *certManager) nextRenewalDeadline() time.Time {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	if cm.currentCert == nil || cm.currentCert.Leaf == nil {
+		return time.Now()
+	}
+	return cm.currentCert.Leaf.NotAfter.Add(-certRenewBefore)
+}
+
+// Background goroutine: sleep until it's time to renew, then call renewCertificates().
+// If that fails, wait a bit and try again. Stops when the process is shutting down.
+func (cm *certManager) runRenewalLoop(ctx context.Context) {
+	for {
+		deadline := cm.nextRenewalDeadline()
+		timeUntilRenewal := time.Until(deadline)
+		if timeUntilRenewal < 0 {
+			timeUntilRenewal = 0
+		}
+
+		log.Log.Infof("Next certificate renewal scheduled for %s (%s from now)", deadline.Format(time.RFC3339), timeUntilRenewal)
+
+		renewalTimer := time.NewTimer(timeUntilRenewal)
+
+		select {
+		case <-renewalTimer.C:
+			log.Log.Info("Certificate renewal deadline reached, renewing certificates...")
+			if err := cm.renewCertificates(); err != nil {
+				log.Log.Reason(err).Errorf("Certificate renewal failed, will retry in %s", retryInterval)
+				select {
+				case <-time.After(retryInterval):
+				case <-ctx.Done():
+					return
+				}
+			}
+		case <-ctx.Done():
+			renewalTimer.Stop()
+			log.Log.Info("Certificate renewal loop stopped due to shutdown")
+			return
+		}
+	}
+}
 
 func generateCertificates(svcName, svcNamespace string) (caCertPEM []byte, tlsCert tls.Certificate, err error) {
 	caKeyPair, err := triple.NewCA("vdpa-webhook.kubevirt.io", certDuration)
@@ -48,7 +159,7 @@ func generateCertificates(svcName, svcNamespace string) (caCertPEM []byte, tlsCe
 		certDuration,
 	)
 	if err != nil {
-		return nil, tls.Certificate{}, fmt.Errorf("create server cert: %v", err)
+		return nil, tls.Certificate{}, fmt.Errorf("failed to create server cert: %v", err)
 	}
 
 	serverCertPEM := cert.EncodeCertPEM(serverKeyPair.Cert)
@@ -56,7 +167,12 @@ func generateCertificates(svcName, svcNamespace string) (caCertPEM []byte, tlsCe
 
 	tlsCert, err = tls.X509KeyPair(serverCertPEM, serverKeyPEM)
 	if err != nil {
-		return nil, tls.Certificate{}, fmt.Errorf("load TLS key pair: %v", err)
+		return nil, tls.Certificate{}, fmt.Errorf("failed to load TLS key pair: %v", err)
+	}
+
+	tlsCert.Leaf, err = x509.ParseCertificate(tlsCert.Certificate[0])
+	if err != nil {
+		return nil, tls.Certificate{}, fmt.Errorf("failed to parse leaf certificate: %v", err)
 	}
 
 	return caCertPEM, tlsCert, nil
