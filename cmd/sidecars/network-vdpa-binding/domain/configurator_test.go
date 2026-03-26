@@ -20,8 +20,12 @@
 package domain_test
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
+	"path"
 	"path/filepath"
 
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -33,6 +37,13 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/network/downwardapi"
 	domainschema "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/api"
+)
+
+const DEFAULT_CONT_NAME = "containername"
+
+var DEFAULT_SYMLINK_DIR = path.Join(
+	"/var/run/kubevirt-hooks/",
+	DEFAULT_CONT_NAME,
 )
 
 func newNetInfo(networkName, vdpaPath, mac string) *downwardapi.NetworkInfo {
@@ -50,14 +61,22 @@ func newNetInfo(networkName, vdpaPath, mac string) *downwardapi.NetworkInfo {
 	}
 }
 
+func slPath(name string) string {
+	hash := sha256.New()
+	_, _ = io.WriteString(hash, name)
+	hashedName := fmt.Sprintf("pod%x", hash.Sum(nil))[:14]
+	return path.Join(DEFAULT_SYMLINK_DIR, hashedName)
+}
+
 var _ = Describe("pod network configurator", func() {
+
 	Context("generate domain spec interface", func() {
 		//  These tests validate how the vDPA network configurator mutates the domain XML
 		//  for different VMI interface configurations, using test helpers to avoid filesystem dependencies.
 		DescribeTable("should fail to create configurator given",
 			func(ifaces []vmschema.Interface, networks []vmschema.Network) {
 				netInfo := &downwardapi.NetworkInfo{}
-				_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+				_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 
 				Expect(err).To(HaveOccurred())
 			},
@@ -87,7 +106,7 @@ var _ = Describe("pod network configurator", func() {
 			// this test validates guest PCI address parsing, not host VF's PCI address.
 			netInfo := newNetInfo("invalid-pci", "/dev/vhost-vdpa-0", "")
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 
 			_, err = testMutator.Mutate(&domainschema.DomainSpec{})
@@ -100,7 +119,7 @@ var _ = Describe("pod network configurator", func() {
 				networks := []vmschema.Network{{Name: iface.Name, NetworkSource: vmschema.NetworkSource{Multus: &vmschema.MultusNetwork{}}}}
 				netInfo := newNetInfo(iface.Name, "/dev/vhost-vdpa-0", macFromDeviceInfo)
 
-				testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+				testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 				Expect(err).ToNot(HaveOccurred())
 
 				mutatedDomSpec, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -112,7 +131,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:  domainschema.NewUserDefinedAlias("vdpa-minimal"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("vdpa-minimal")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    nil,
 				},
@@ -124,7 +143,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:   domainschema.NewUserDefinedAlias("vdpa-with-pci"),
 					Type:    "vdpa",
-					Source:  domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source:  domainschema.InterfaceSource{Device: slPath("vdpa-with-pci")},
 					Model:   &domainschema.Model{Type: "virtio"},
 					Address: &domainschema.Address{Type: "pci", Domain: "0x0000", Bus: "0x02", Slot: "0x02", Function: "0x0"},
 					MAC:     nil,
@@ -137,7 +156,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:  domainschema.NewUserDefinedAlias("vdpa-with-mac"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("vdpa-with-mac")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    &domainschema.MAC{MAC: "02:02:02:02:02:02"},
 				},
@@ -149,7 +168,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:  domainschema.NewUserDefinedAlias("vdpa-with-acpi"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("vdpa-with-acpi")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					ACPI:   &domainschema.ACPI{Index: uint(2)},
 				},
@@ -160,7 +179,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:  domainschema.NewUserDefinedAlias("deviceinfo-mac"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("deviceinfo-mac")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    &domainschema.MAC{MAC: "de:ad:00:00:be:af"},
 				},
@@ -173,7 +192,7 @@ var _ = Describe("pod network configurator", func() {
 				&domainschema.Interface{
 					Alias:  domainschema.NewUserDefinedAlias("mac-override"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("mac-override")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    &domainschema.MAC{MAC: "02:02:02:02:02:02"},
 				},
@@ -195,11 +214,11 @@ var _ = Describe("pod network configurator", func() {
 			expectedDomainIface := &domainschema.Interface{
 				Alias:  domainschema.NewUserDefinedAlias("vdpa-iface"),
 				Type:   "vdpa",
-				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+				Source: domainschema.InterfaceSource{Device: slPath("vdpa-iface")},
 				Model:  &domainschema.Model{Type: "virtio"},
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 
 			existingIface := &domainschema.Interface{Alias: domainschema.NewUserDefinedAlias("bridge-iface")}
@@ -220,12 +239,12 @@ var _ = Describe("pod network configurator", func() {
 			expectedDomainIface := &domainschema.Interface{
 				Alias:  domainschema.NewUserDefinedAlias("vdpa-idempotent"),
 				Type:   "vdpa",
-				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+				Source: domainschema.InterfaceSource{Device: slPath("vdpa-idempotent")},
 				Model:  &domainschema.Model{Type: "virtio"},
 				MAC:    nil,
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 
 			firstResult, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -273,20 +292,20 @@ var _ = Describe("pod network configurator", func() {
 				{
 					Alias:  domainschema.NewUserDefinedAlias("vdpa-net-1"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-0"},
+					Source: domainschema.InterfaceSource{Device: slPath("vdpa-net-1")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    &domainschema.MAC{MAC: "aa:bb:cc:dd:ee:01"},
 				},
 				{
 					Alias:  domainschema.NewUserDefinedAlias("vdpa-net-2"),
 					Type:   "vdpa",
-					Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-1"},
+					Source: domainschema.InterfaceSource{Device: slPath("vdpa-net-2")},
 					Model:  &domainschema.Model{Type: "virtio"},
 					MAC:    &domainschema.MAC{MAC: "aa:bb:cc:dd:ee:02"},
 				},
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 
 			mutatedDomSpec, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -306,7 +325,7 @@ var _ = Describe("pod network configurator", func() {
 
 			netInfo := newNetInfo("vdpa-net-1", "/dev/vhost-vdpa-0", "")
 
-			_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
+			_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, DEFAULT_CONT_NAME)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -318,31 +337,26 @@ var _ = Describe("pod network configurator", func() {
 			expectedDomainIface1 := &domainschema.Interface{
 				Alias:  domainschema.NewUserDefinedAlias("vdpa-path-update"),
 				Type:   "vdpa",
-				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-1"},
+				Source: domainschema.InterfaceSource{Device: slPath("vdpa-path-update")},
 				Model:  &domainschema.Model{Type: "virtio"},
 				MAC:    nil,
 			}
 
 			netInfo2 := newNetInfo("vdpa-path-update", "/dev/vhost-vdpa-2", "")
-			expectedDomainIface2 := &domainschema.Interface{
-				Alias:  domainschema.NewUserDefinedAlias("vdpa-path-update"),
-				Type:   "vdpa",
-				Source: domainschema.InterfaceSource{Device: "/dev/vhost-vdpa-2"},
-				Model:  &domainschema.Model{Type: "virtio"},
-				MAC:    nil,
-			}
 
-			testMutator1, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo1)
+			testMutator1, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo1, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 			result1, err := testMutator1.Mutate(&domainschema.DomainSpec{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result1.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface1}))
 
-			testMutator2, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo2)
+			testMutator2, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo2, DEFAULT_CONT_NAME)
 			Expect(err).ToNot(HaveOccurred())
 			result2, err := testMutator2.Mutate(result1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(result2.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface2}))
+			// Even if /dev/vhost-vdpa-* path changes in networkinfo,
+			// the symlink path should remain the same
+			Expect(result2.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface1}))
 		})
 	})
 

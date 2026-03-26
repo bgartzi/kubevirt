@@ -23,18 +23,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
-	"strings"
 
 	vmschema "kubevirt.io/api/core/v1"
 
 	"kubevirt.io/kubevirt/pkg/network/downwardapi"
 
+	"kubevirt.io/kubevirt/pkg/hooks"
 	hooksInfo "kubevirt.io/kubevirt/pkg/hooks/info"
 	hooksV1alpha2 "kubevirt.io/kubevirt/pkg/hooks/v1alpha2"
 
 	"kubevirt.io/kubevirt/cmd/sidecars/network-vdpa-binding/callback"
 	"kubevirt.io/kubevirt/cmd/sidecars/network-vdpa-binding/domain"
+	"kubevirt.io/kubevirt/cmd/sidecars/network-vdpa-binding/symlink"
 )
 
 type InfoServer struct {
@@ -70,9 +72,23 @@ func (s V1alpha2Server) OnDefineDomain(_ context.Context, params *hooksV1alpha2.
 		return nil, fmt.Errorf("failed to read network-info: %v", err)
 	}
 
-	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, netInfo)
+	symlinkFactory := symlink.NewSharedSymlinkFactory()
+
+	containerName := os.Getenv(hooks.ContainerNameEnvVar)
+	if containerName == "" {
+		return nil, fmt.Errorf("failed to get %s environment variable", hooks.ContainerNameEnvVar)
+	}
+
+	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, netInfo, containerName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vdpa configurator: %v", err)
+	}
+
+	for vdpaPath, symlinkName := range vdpaConfigurator.VdpaPathsToSymlinkNames() {
+		err = symlinkFactory.CreateSharedSymlink(vdpaPath, symlinkName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	newDomainXML, err := callback.OnDefineDomain(params.GetDomainXML(), vdpaConfigurator)

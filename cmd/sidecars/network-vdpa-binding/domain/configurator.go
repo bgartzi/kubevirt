@@ -36,17 +36,21 @@ import (
 	"kubevirt.io/kubevirt/pkg/network/downwardapi"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/device"
 
+	"kubevirt.io/kubevirt/cmd/sidecars/network-vdpa-binding/symlink"
+	netnamescheme "kubevirt.io/kubevirt/pkg/network/namescheme"
 	"kubevirt.io/kubevirt/pkg/network/vmispec"
 )
 
 type VdpaIfaceConfig struct {
 	vmiSpecIface *vmschema.Interface
 	vdpaPath     string
+	symlinkName  string
 	macAddr      string
 }
 
 type VdpaNetworkConfigurator struct {
-	vdpaConfigs []*VdpaIfaceConfig
+	vdpaConfigs   []*VdpaIfaceConfig
+	containerName string
 }
 
 const (
@@ -89,7 +93,13 @@ func lookupNetworkInfoByName(name string, netInfo *downwardapi.NetworkInfo) (*do
 	return nil, fmt.Errorf("failed to find networkinfo for interface %s", name)
 }
 
-func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, netInfo *downwardapi.NetworkInfo) (*VdpaNetworkConfigurator, error) {
+func NewVdpaNetworkConfigurator(
+	ifaces []vmschema.Interface,
+	networks []vmschema.Network,
+	netInfo *downwardapi.NetworkInfo,
+	containerName string,
+) (*VdpaNetworkConfigurator, error) {
+	netNameSchema := netnamescheme.CreateHashedNetworkNameScheme(networks)
 	var configs []*VdpaIfaceConfig
 	for _, net := range networks {
 		if net.Multus != nil {
@@ -108,10 +118,13 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 				return nil, err
 			}
 
+			podNetName := netNameSchema[net.Name]
+
 			configs = append(configs,
 				&VdpaIfaceConfig{
 					vmiSpecIface: iface,
 					vdpaPath:     ifaceInfo.DeviceInfo.Vdpa.Path,
+					symlinkName:  podNetName,
 					macAddr:      ifaceInfo.Mac,
 				},
 			)
@@ -122,7 +135,11 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 		return nil, fmt.Errorf("no vdpa interface found")
 	}
 
-	return &VdpaNetworkConfigurator{vdpaConfigs: configs}, nil
+	return &VdpaNetworkConfigurator{
+			vdpaConfigs:   configs,
+			containerName: containerName,
+		},
+		nil
 }
 
 func (p VdpaNetworkConfigurator) Mutate(domainSpec *domainschema.DomainSpec) (*domainschema.DomainSpec, error) {
@@ -180,6 +197,8 @@ func (p VdpaNetworkConfigurator) generateInterfaces() ([]*domainschema.Interface
 			acpi = &domainschema.ACPI{Index: uint(cfg.vmiSpecIface.ACPIIndex)}
 		}
 
+		vdpaPath := symlink.SharedComputeSymlinkPath(p.containerName, cfg.symlinkName)
+
 		domainInterfaces = append(domainInterfaces, &domainschema.Interface{
 			Alias:   domainschema.NewUserDefinedAlias(cfg.vmiSpecIface.Name),
 			Model:   &domainschema.Model{Type: "virtio"},
@@ -187,9 +206,17 @@ func (p VdpaNetworkConfigurator) generateInterfaces() ([]*domainschema.Interface
 			MAC:     mac,
 			ACPI:    acpi,
 			Type:    "vdpa",
-			Source:  domainschema.InterfaceSource{Device: cfg.vdpaPath},
+			Source:  domainschema.InterfaceSource{Device: vdpaPath},
 		})
 	}
 
 	return domainInterfaces, nil
+}
+
+func (p *VdpaNetworkConfigurator) VdpaPathsToSymlinkNames() map[string]string {
+	pathsToSymlinks := make(map[string]string, len(p.vdpaConfigs))
+	for _, cfg := range p.vdpaConfigs {
+		pathsToSymlinks[cfg.vdpaPath] = cfg.symlinkName
+	}
+	return pathsToSymlinks
 }
