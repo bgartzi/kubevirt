@@ -64,26 +64,13 @@ func (s V1alpha2Server) OnDefineDomain(_ context.Context, params *hooksV1alpha2.
 		return nil, fmt.Errorf("failed to unmarshal VMI: %v", err)
 	}
 
-	useVirtioTransitional := vmi.Spec.Domain.Devices.UseVirtioTransitional != nil && *vmi.Spec.Domain.Devices.UseVirtioTransitional
-
-	const istioInjectAnnotation = "sidecar.istio.io/inject"
-	istioProxyInjectionEnabled := false
-	if val, ok := vmi.GetAnnotations()[istioInjectAnnotation]; ok {
-		istioProxyInjectionEnabled = strings.ToLower(val) == "true"
-	}
-
-	opts := domain.NetworkConfiguratorOptions{
-		UseVirtioTransitional:      useVirtioTransitional,
-		IstioProxyInjectionEnabled: istioProxyInjectionEnabled,
-	}
-
 	netInfoPath := path.Join(downwardapi.MountPath, downwardapi.NetworkInfoVolumePath)
 	netInfo, err := domain.GetDownwardAPINetworkInfo(netInfoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read network-info: %v", err)
 	}
 
-	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, netInfo, opts)
+	vdpaConfigurator, err := domain.NewVdpaNetworkConfigurator(vmi.Spec.Domain.Devices.Interfaces, vmi.Spec.Networks, netInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vdpa configurator: %v", err)
 	}
