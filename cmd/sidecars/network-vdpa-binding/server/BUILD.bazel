@@ -8,6 +8,8 @@ go_library(
     deps = [
         "//cmd/sidecars/network-vdpa-binding/callback:go_default_library",
         "//cmd/sidecars/network-vdpa-binding/domain:go_default_library",
+        "//cmd/sidecars/network-vdpa-binding/symlink:go_default_library",
+        "//pkg/hooks:go_default_library",
         "//pkg/hooks/info:go_default_library",
         "//pkg/hooks/v1alpha2:go_default_library",
         "//pkg/network/downwardapi:go_default_library",
