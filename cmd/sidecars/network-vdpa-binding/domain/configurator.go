@@ -39,14 +39,8 @@ import (
 	"kubevirt.io/kubevirt/pkg/network/vmispec"
 )
 
-type NetworkConfiguratorOptions struct {
-	IstioProxyInjectionEnabled bool
-	UseVirtioTransitional      bool
-}
-
 type VdpaNetworkConfigurator struct {
 	vmiSpecIfaces []*vmschema.Interface
-	options       NetworkConfiguratorOptions
 	vdpaPaths     []string
 	macAddrs      []string
 }
@@ -82,7 +76,7 @@ func GetDownwardAPINetworkInfo(filePath string) (*downwardapi.NetworkInfo, error
 	return result, nil
 }
 
-func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, netInfo *downwardapi.NetworkInfo, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
+func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, netInfo *downwardapi.NetworkInfo) (*VdpaNetworkConfigurator, error) {
 	var macs []string
 	var vdpaPaths []string
 
@@ -103,15 +97,13 @@ func getIfaceVdpaConfigurator(ifaces []*vmschema.Interface, netInfo *downwardapi
 
 	return &VdpaNetworkConfigurator{
 		vmiSpecIfaces: ifaces,
-		options:       opts,
 		vdpaPaths:     vdpaPaths,
 		macAddrs:      macs,
 	}, nil
 
 }
 
-func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, netInfo *downwardapi.NetworkInfo, opts NetworkConfiguratorOptions) (*VdpaNetworkConfigurator, error) {
-
+func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema.Network, netInfo *downwardapi.NetworkInfo) (*VdpaNetworkConfigurator, error) {
 	var vdpaIfaces []*vmschema.Interface
 	for _, net := range networks {
 		if net.Multus != nil {
@@ -133,7 +125,7 @@ func NewVdpaNetworkConfigurator(ifaces []vmschema.Interface, networks []vmschema
 		return nil, fmt.Errorf("no vdpa interface found")
 	}
 
-	return getIfaceVdpaConfigurator(vdpaIfaces, netInfo, opts)
+	return getIfaceVdpaConfigurator(vdpaIfaces, netInfo)
 }
 
 func (p VdpaNetworkConfigurator) Mutate(domainSpec *domainschema.DomainSpec) (*domainschema.DomainSpec, error) {

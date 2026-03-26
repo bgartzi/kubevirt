@@ -57,7 +57,7 @@ var _ = Describe("pod network configurator", func() {
 		DescribeTable("should fail to create configurator given",
 			func(ifaces []vmschema.Interface, networks []vmschema.Network) {
 				netInfo := &downwardapi.NetworkInfo{}
-				_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+				_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 
 				Expect(err).To(HaveOccurred())
 			},
@@ -87,7 +87,7 @@ var _ = Describe("pod network configurator", func() {
 			// this test validates guest PCI address parsing, not host VF's PCI address.
 			netInfo := newNetInfo("invalid-pci", "/dev/vhost-vdpa-0", "")
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 			Expect(err).ToNot(HaveOccurred())
 
 			_, err = testMutator.Mutate(&domainschema.DomainSpec{})
@@ -100,7 +100,7 @@ var _ = Describe("pod network configurator", func() {
 				networks := []vmschema.Network{{Name: iface.Name, NetworkSource: vmschema.NetworkSource{Multus: &vmschema.MultusNetwork{}}}}
 				netInfo := newNetInfo(iface.Name, "/dev/vhost-vdpa-0", macFromDeviceInfo)
 
-				testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+				testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 				Expect(err).ToNot(HaveOccurred())
 
 				mutatedDomSpec, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -199,7 +199,7 @@ var _ = Describe("pod network configurator", func() {
 				Model:  &domainschema.Model{Type: "virtio"},
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 			Expect(err).ToNot(HaveOccurred())
 
 			existingIface := &domainschema.Interface{Alias: domainschema.NewUserDefinedAlias("bridge-iface")}
@@ -225,7 +225,7 @@ var _ = Describe("pod network configurator", func() {
 				MAC:    nil,
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 			Expect(err).ToNot(HaveOccurred())
 
 			firstResult, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -286,7 +286,7 @@ var _ = Describe("pod network configurator", func() {
 				},
 			}
 
-			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+			testMutator, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 			Expect(err).ToNot(HaveOccurred())
 
 			mutatedDomSpec, err := testMutator.Mutate(&domainschema.DomainSpec{})
@@ -306,7 +306,7 @@ var _ = Describe("pod network configurator", func() {
 
 			netInfo := newNetInfo("vdpa-net-1", "/dev/vhost-vdpa-0", "")
 
-			_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo, domain.NetworkConfiguratorOptions{})
+			_, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -332,13 +332,13 @@ var _ = Describe("pod network configurator", func() {
 				MAC:    nil,
 			}
 
-			testMutator1, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo1, domain.NetworkConfiguratorOptions{})
+			testMutator1, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo1)
 			Expect(err).ToNot(HaveOccurred())
 			result1, err := testMutator1.Mutate(&domainschema.DomainSpec{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result1.Devices.Interfaces).To(Equal([]domainschema.Interface{*expectedDomainIface1}))
 
-			testMutator2, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo2, domain.NetworkConfiguratorOptions{})
+			testMutator2, err := domain.NewVdpaNetworkConfigurator(ifaces, networks, netInfo2)
 			Expect(err).ToNot(HaveOccurred())
 			result2, err := testMutator2.Mutate(result1)
 			Expect(err).ToNot(HaveOccurred())
