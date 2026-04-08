@@ -40,12 +40,12 @@ const (
 )
 
 func main() {
-	log.InitializeLogging(webhookName)
-
 	port := flag.Int("port", 8443, "Webhook listen port")
 	svcName := flag.String("service-name", webhookName, "Webhook service name")
 	svcNamespace := flag.String("namespace", "kubevirt", "Webhook service namespace")
 	flag.Parse()
+
+	log.InitializeLogging(webhookName)
 
 	certMgr, err := newCertManager(*svcName, *svcNamespace)
 	if err != nil {
