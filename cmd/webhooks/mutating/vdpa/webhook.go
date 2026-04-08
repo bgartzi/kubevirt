@@ -94,44 +94,69 @@ func mutateVM(ar *admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 
 	vmSpec := &vm.Spec.Template.Spec
 	vdpaCount := countVDPAInterfaces(vmSpec.Domain.Devices.Interfaces)
-	if vdpaCount == 0 {
+	previousVDPAOverhead := calculatePreviousVDPAOverhead(ar)
+	if vdpaCount == 0 && previousVDPAOverhead == nil {
 		log.Log.V(4).Infof("VM %s/%s has no vDPA interfaces, skipping mutation", ar.Request.Namespace, ar.Request.Name)
 		return allowWithoutPatch()
 	}
 
-	requiredOverhead, err := calculateRequiredVDPAMemoryOverhead(vdpaCount, vmSpec)
-	if err != nil {
-		log.Log.Warningf("Cannot calculate vDPA overhead for VM %s/%s: %v", ar.Request.Namespace, ar.Request.Name, err)
-		return &admissionv1.AdmissionResponse{
-			Allowed: false,
-			Result: &metav1.Status{
-				Message: fmt.Sprintf("failed to calculate vDPA memory overhead: %v", err),
-			},
+	var currentVDPAOverhead *resource.Quantity
+	if vdpaCount > 0 {
+		var err error
+		currentVDPAOverhead, err = calculateRequiredVDPAMemoryOverhead(vdpaCount, vmSpec)
+		if err != nil {
+			log.Log.Warningf("Cannot calculate vDPA overhead for VM %s/%s: %v", ar.Request.Namespace, ar.Request.Name, err)
+			return &admissionv1.AdmissionResponse{
+				Allowed: false,
+				Result: &metav1.Status{
+					Message: fmt.Sprintf("failed to calculate vDPA memory overhead: %v", err),
+				},
+			}
 		}
 	}
 
-	patchSet := patch.New()
 	memoryExists := vmSpec.Domain.Memory != nil
 	reservedOverheadExists := memoryExists && vmSpec.Domain.Memory.ReservedOverhead != nil
 
+	memLockNeeded := vdpaCount > 0 && !(reservedOverheadExists && vmSpec.Domain.Memory.ReservedOverhead.MemLock != nil && *vmSpec.Domain.Memory.ReservedOverhead.MemLock == v1.MemLockRequired)
+
+	updatedAddedOverhead := *resource.NewQuantity(0, resource.BinarySI)
+	if reservedOverheadExists && vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead != nil {
+		updatedAddedOverhead = vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead.DeepCopy()
+	}
+
+	if previousVDPAOverhead != nil {
+		updatedAddedOverhead.Sub(*previousVDPAOverhead)
+		if updatedAddedOverhead.Sign() < 0 {
+			updatedAddedOverhead = *resource.NewQuantity(0, resource.BinarySI)
+		}
+	}
+	if currentVDPAOverhead != nil {
+		updatedAddedOverhead.Add(*currentVDPAOverhead)
+	}
+
+	overheadChanged := !(reservedOverheadExists && vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead != nil && updatedAddedOverhead.Cmp(*vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead) == 0)
+
+	if !memLockNeeded && !overheadChanged {
+		log.Log.V(4).Infof("VM %s/%s vDPA settings already correct, skipping mutation", ar.Request.Namespace, ar.Request.Name)
+		return allowWithoutPatch()
+	}
+
+	patchSet := patch.New()
 	if !memoryExists {
 		patchSet.AddOption(patch.WithAdd(pathMemory, map[string]interface{}{}))
 	}
 	if !reservedOverheadExists {
 		patchSet.AddOption(patch.WithAdd(pathReservedOverhead, map[string]interface{}{}))
 	}
-
-	if !(reservedOverheadExists && vmSpec.Domain.Memory.ReservedOverhead.MemLock != nil && *vmSpec.Domain.Memory.ReservedOverhead.MemLock == v1.MemLockRequired) {
+	if memLockNeeded {
 		log.Log.V(2).Infof("Setting MemLock to Required for VM %s/%s", ar.Request.Namespace, ar.Request.Name)
 		patchSet.AddOption(patch.WithAdd(pathMemLock, v1.MemLockRequired))
 	}
-
-	totalOverhead := requiredOverhead.DeepCopy()
-	if reservedOverheadExists && vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead != nil {
-		totalOverhead.Add(*vmSpec.Domain.Memory.ReservedOverhead.AddedOverhead)
+	if overheadChanged {
+		log.Log.V(2).Infof("Setting vDPA AddedOverhead to %s for VM %s/%s (%d vDPA interfaces)", updatedAddedOverhead.String(), ar.Request.Namespace, ar.Request.Name, vdpaCount)
+		patchSet.AddOption(patch.WithAdd(pathAddedOverhead, updatedAddedOverhead.String()))
 	}
-	log.Log.V(2).Infof("Setting vDPA AddedOverhead to %s for VM %s/%s (%d vDPA interfaces, calculated: %s)", totalOverhead.String(), ar.Request.Namespace, ar.Request.Name, vdpaCount, requiredOverhead.String())
-	patchSet.AddOption(patch.WithAdd(pathAddedOverhead, totalOverhead.String()))
 
 	patchBytes, err := patchSet.GeneratePayload()
 	if err != nil {
@@ -145,6 +170,34 @@ func mutateVM(ar *admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 		Patch:     patchBytes,
 		PatchType: &patchType,
 	}
+}
+
+func calculatePreviousVDPAOverhead(ar *admissionv1.AdmissionReview) *resource.Quantity {
+	if ar.Request.Operation != admissionv1.Update || len(ar.Request.OldObject.Raw) == 0 {
+		return nil
+	}
+
+	oldVM := &v1.VirtualMachine{}
+	if err := json.Unmarshal(ar.Request.OldObject.Raw, oldVM); err != nil {
+		log.Log.Reason(err).Warning("Failed to unmarshal old VM from AdmissionReview")
+		return nil
+	}
+	if oldVM.Spec.Template == nil {
+		return nil
+	}
+
+	oldSpec := &oldVM.Spec.Template.Spec
+	oldVDPACount := countVDPAInterfaces(oldSpec.Domain.Devices.Interfaces)
+	if oldVDPACount == 0 {
+		return nil
+	}
+
+	oldVDPAOverhead, err := calculateRequiredVDPAMemoryOverhead(oldVDPACount, oldSpec)
+	if err != nil {
+		log.Log.Reason(err).Warning("Failed to calculate required vDPA overhead for old VM spec")
+		return nil
+	}
+	return oldVDPAOverhead
 }
 
 func countVDPAInterfaces(ifaces []v1.Interface) int {

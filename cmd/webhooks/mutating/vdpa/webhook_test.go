@@ -48,6 +48,22 @@ func newAdmissionReviewFromVM(vm *v1.VirtualMachine) *admissionv1.AdmissionRevie
 	}
 }
 
+func newAdmissionReviewForVMUpdate(oldVM, newVM *v1.VirtualMachine) *admissionv1.AdmissionReview {
+	oldVMBytes, err := json.Marshal(oldVM)
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+	newVMBytes, err := json.Marshal(newVM)
+	ExpectWithOffset(1, err).ToNot(HaveOccurred())
+	return &admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Operation: admissionv1.Update,
+			Namespace: "default",
+			Name:      newVM.Name,
+			Object:    runtime.RawExtension{Raw: newVMBytes},
+			OldObject: runtime.RawExtension{Raw: oldVMBytes},
+		},
+	}
+}
+
 func getPatchesFromResponse(resp *admissionv1.AdmissionResponse) []patch.PatchOperation {
 	ExpectWithOffset(1, resp).ToNot(BeNil())
 	ExpectWithOffset(1, resp.Allowed).To(BeTrue())
@@ -180,6 +196,81 @@ var _ = Describe("vDPA Mutating Webhook", func() {
 			overheadPatch := findPatch(patches, pathAddedOverhead)
 			Expect(overheadPatch).ToNot(BeNil())
 			Expect(overheadPatch.Value).To(Equal("5Gi")) // 1Gi + (2-1)*4Gi = 5Gi
+		})
+	})
+
+	Context("mutateVM on Update", func() {
+		It("should skip mutation on identical update when overhead and memlock are already set", func() {
+			oldVM := vm.DeepCopy()
+			existingAddedOverhead := resource.MustParse("1Gi")
+			memLock := v1.MemLockRequirement(v1.MemLockRequired)
+			oldVM.Spec.Template.Spec.Domain.Memory.ReservedOverhead = &v1.ReservedOverhead{
+				AddedOverhead: &existingAddedOverhead,
+				MemLock:       &memLock,
+			}
+			oldVM.Spec.Template.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{Name: "vdpa-net", Binding: &v1.PluginBinding{Name: "vdpa"}},
+			}
+			newVM := oldVM.DeepCopy()
+
+			ar := newAdmissionReviewForVMUpdate(oldVM, newVM)
+			resp := mutateVM(ar)
+			Expect(resp.Allowed).To(BeTrue())
+			Expect(resp.Patch).To(BeNil())
+		})
+
+		It("should increase overhead correctly when scaling up vDPA interfaces", func() {
+			oldVM := vm.DeepCopy()
+			existingAddedOverhead := resource.MustParse("1536Mi") // 1Gi vDPA + 512Mi user
+			oldVM.Spec.Template.Spec.Domain.Memory.ReservedOverhead = &v1.ReservedOverhead{
+				AddedOverhead: &existingAddedOverhead,
+			}
+			oldVM.Spec.Template.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{Name: "vdpa-net", Binding: &v1.PluginBinding{Name: "vdpa"}},
+			}
+			newVM := oldVM.DeepCopy()
+			newVM.Spec.Template.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{Name: "vdpa-net1", Binding: &v1.PluginBinding{Name: "vdpa"}},
+				{Name: "vdpa-net2", Binding: &v1.PluginBinding{Name: "vdpa"}},
+			}
+
+			ar := newAdmissionReviewForVMUpdate(oldVM, newVM)
+			resp := mutateVM(ar)
+			patches := getPatchesFromResponse(resp)
+
+			overheadPatch := findPatch(patches, pathAddedOverhead)
+			Expect(overheadPatch).ToNot(BeNil())
+			result := resource.MustParse(overheadPatch.Value.(string))
+			expected := resource.MustParse("3584Mi") // 3Gi + 512Mi
+			Expect(result.Cmp(expected)).To(BeZero())
+		})
+
+		It("should strip vDPA overhead when all vDPA interfaces are removed", func() {
+			oldVM := vm.DeepCopy()
+			existingAddedOverhead := resource.MustParse("1536Mi") // 1Gi vDPA + 512Mi user
+			oldVM.Spec.Template.Spec.Domain.Memory.ReservedOverhead = &v1.ReservedOverhead{
+				AddedOverhead: &existingAddedOverhead,
+			}
+			oldVM.Spec.Template.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{Name: "vdpa-net", Binding: &v1.PluginBinding{Name: "vdpa"}},
+			}
+			newVM := oldVM.DeepCopy()
+			newVM.Spec.Template.Spec.Domain.Devices.Interfaces = []v1.Interface{
+				{Name: "masq-net", InterfaceBindingMethod: v1.InterfaceBindingMethod{Masquerade: &v1.InterfaceMasquerade{}}},
+			}
+
+			ar := newAdmissionReviewForVMUpdate(oldVM, newVM)
+			resp := mutateVM(ar)
+			patches := getPatchesFromResponse(resp)
+
+			overheadPatch := findPatch(patches, pathAddedOverhead)
+			Expect(overheadPatch).ToNot(BeNil())
+			result := resource.MustParse(overheadPatch.Value.(string))
+			expected := resource.MustParse("512Mi")
+			Expect(result.Cmp(expected)).To(BeZero())
+
+			memLockPatch := findPatch(patches, pathMemLock)
+			Expect(memLockPatch).To(BeNil())
 		})
 	})
 })
