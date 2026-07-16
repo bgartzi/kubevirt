@@ -185,6 +185,7 @@ require (
 require github.com/google/goterm v0.0.0-20190311235235-ce302be1d114 // indirect; indirect github.com/gophercloud/gophercloud v0.4.0 // indirect
 
 replace (
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client => github.com/bgartzi/network-attachment-definition-client v0.0.0-20260715133712-596c2bd72365
 	github.com/nxadm/tail => github.com/nxadm/tail v0.0.0-20211216163028-4472660a31a6
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20210112165513-ebc401615f47

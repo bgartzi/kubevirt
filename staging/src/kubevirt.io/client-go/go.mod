@@ -71,6 +71,7 @@ require (
 )
 
 replace (
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client => github.com/bgartzi/network-attachment-definition-client v0.0.0-20260715133712-596c2bd72365
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
 
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b

@@ -92,4 +92,21 @@ var _ = Describe("Network info", func() {
 
 		Expect(actualNetworkInfo).To(Equal(expectedNetworkInfo))
 	})
+
+	It("should allow building networkinfo with maxvqp", func() {
+		_ = downwardapi.NetworkInfo{
+			Interfaces: []downwardapi.Interface{
+				{
+					Network: "whatever",
+					Mac:     "02:11:22:33:44:55",
+					DeviceInfo: &networkv1.DeviceInfo{
+						Type: "vdpa",
+						Vdpa: &networkv1.VdpaDevice{
+							MaxVQP: uint16(16),
+						},
+					},
+				},
+			},
+		}
+	})
 })

@@ -302,7 +302,7 @@ github.com/insomniacslk/dhcp/rfc1035label
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
+# github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7 => github.com/bgartzi/network-attachment-definition-client v0.0.0-20260715133712-596c2bd72365
 ## explicit; go 1.21
 github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io
 github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1
@@ -1523,3 +1523,4 @@ sigs.k8s.io/yaml
 # github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20210112165513-ebc401615f47
 # github.com/operator-framework/operator-lifecycle-manager => github.com/operator-framework/operator-lifecycle-manager v0.0.0-20190128024246-5eb7ae5bdb7a
 # k8s.io/klog => k8s.io/klog v0.4.0
+# github.com/k8snetworkplumbingwg/network-attachment-definition-client => github.com/bgartzi/network-attachment-definition-client v0.0.0-20260715133712-596c2bd72365

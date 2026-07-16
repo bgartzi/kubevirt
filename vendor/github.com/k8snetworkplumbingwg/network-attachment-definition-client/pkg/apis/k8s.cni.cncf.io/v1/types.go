@@ -74,6 +74,8 @@ type VdpaDevice struct {
 	PciAddress        string `json:"pci-address,omitempty"`
 	PfPciAddress      string `json:"pf-pci-address,omitempty"`
 	RepresentorDevice string `json:"representor-device,omitempty"`
+	MaxVQP            uint16 `json:"max-vq-pair,omitempty"`
+	VirtioFeatures    uint64 `json:"virtio-features,omitempty"`
 }
 
 const (
