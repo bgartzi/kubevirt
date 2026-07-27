@@ -109,4 +109,43 @@ var _ = Describe("Network info", func() {
 			},
 		}
 	})
+
+	It("should allow building networkinfo with virtio features", func() {
+		deviceInfo := &networkv1.DeviceInfo{
+			Type: "vdpa",
+			Vdpa: &networkv1.VdpaDevice{
+				VirtioFeatures: uint64(87),
+			},
+		}
+
+		networkStatus := map[string]networkv1.NetworkStatus{
+			"whatever": {
+				Interface:  "pod33219a16a42",
+				Mac:        "02:11:22:33:44:55",
+				DeviceInfo: deviceInfo,
+			},
+		}
+
+		annotation := downwardapi.CreateNetworkInfoAnnotationValue(networkStatus)
+		var networkInfo downwardapi.NetworkInfo
+		Expect(json.Unmarshal([]byte(annotation), &networkInfo)).To(Succeed())
+
+		expectedNetworkInfo := downwardapi.NetworkInfo{
+			Interfaces: []downwardapi.Interface{
+				{
+					Network: "whatever",
+					Mac:     "02:11:22:33:44:55",
+					DeviceInfo: &networkv1.DeviceInfo{
+						Type: "vdpa",
+						Vdpa: &networkv1.VdpaDevice{
+							VirtioFeatures: uint64(87),
+						},
+					},
+				},
+			},
+		}
+
+		Expect(networkInfo).To(Equal(expectedNetworkInfo))
+
+	})
 })
